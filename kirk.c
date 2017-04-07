@@ -11,6 +11,7 @@
 /* --- preprocessor --- */
 #define CTRL_KEY(k) ((k) & 0x1f)
 #define ABUF_INIT {NULL, 0}
+#define KIRK_VERSION "0.0.1"
 
 /* --- data --- */
 struct editorConfig{
@@ -126,20 +127,41 @@ void abFree(struct abuf * ab){
 /* --- output --- */
 void editorDrawRows(struct abuf *ab){
 	int y;
+	char welcome[80];
+	int welcomelen;
+	int padding;
+
 	for(y = 0; y < E.screenrows-1; y++){
-		abAppend(ab, "~\r\n", 3);
+		if( y == E.screenrows / 3 ){
+			welcomelen = snprintf(welcome, sizeof(welcome),
+				"Kirk editor -- version %s", KIRK_VERSION);
+			if(welcomelen > E.screencols)
+				welcomelen = E.screencols;
+			padding = (E.screencols - welcomelen) / 2;
+			if(padding){
+				abAppend(ab, "~", 1);
+				padding --;
+			}
+			while(padding--)
+				abAppend(ab, " ", 1);
+			abAppend(ab, welcome, welcomelen);	
+		}else{
+			abAppend(ab, "~\x1b[K\r\n", 6);
+		}
 	}
-	abAppend(ab, "~", 1);
+	abAppend(ab, "~\x1b", 4);
 }
 
 void editorRefreshScreen(){
 	struct abuf ab = ABUF_INIT;
 
-	abAppend(&ab, "\x1b[2J", 4);
+	abAppend(&ab, "\x1b[?25l", 6);
 	abAppend(&ab, "\x1b[H", 3);
 	
 	editorDrawRows(&ab);
+
 	abAppend(&ab, "\x1b[H", 3);
+	abAppend(&ab, "\x1b[?25h", 6);
 
 	write(STDOUT_FILENO, ab.b, ab.len);
 	abFree(&ab);
