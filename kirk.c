@@ -18,7 +18,9 @@ enum editorKey{
 	ARROW_LEFT = 1000,
 	ARROW_RIGHT,
 	ARROW_UP,
-	ARROW_DOWN
+	ARROW_DOWN,
+	PAGE_UP,
+	PAGE_DOWN
 };
 
 struct editorConfig{
@@ -85,15 +87,28 @@ int editorReadKey(){
 			return '\x1b';
 
 		if(seq[0] == '['){
-			switch(seq[1]){
-				case 'A':
-					return ARROW_UP;
-				case 'B':
-					return ARROW_DOWN;
-				case 'C':
-					return ARROW_RIGHT;
-				case 'D':
-					return ARROW_LEFT;
+			if(seq[1] >= '0' && seq[1] <= '9'){
+				if(read(STDIN_FILENO, &seq[2], 1) !=1)
+					return '\x1b';
+				if(seq[2] == '~'){
+					switch(seq[1]){
+						case '5':
+							return PAGE_UP;
+						case '6':
+							return PAGE_DOWN;
+					}
+				}
+			}else{
+				switch(seq[1]){
+					case 'A':
+						return ARROW_UP;
+					case 'B':
+						return ARROW_DOWN;
+					case 'C':
+						return ARROW_RIGHT;
+					case 'D':
+						return ARROW_LEFT;
+				}
 			}
 		}
 		
@@ -177,6 +192,7 @@ void editorDrawRows(struct abuf *ab){
 			while(padding--)
 				abAppend(ab, " ", 1);
 			abAppend(ab, welcome, welcomelen);	
+			abAppend(ab, "\r\n", 2);
 		}else{
 			abAppend(ab, "~\x1b[K\r\n", 6);
 		}
@@ -229,7 +245,7 @@ void editorMoveCursor(int key){
 }
 
 void editorProcessKeypress(){
-	int c;
+	int c, i;
 	c = editorReadKey();
 
 	switch(c){
@@ -237,6 +253,12 @@ void editorProcessKeypress(){
 			write(STDOUT_FILENO, "\x1b[2J", 4);
 			write(STDOUT_FILENO, "\x1b[H", 3);
 			exit(EXIT_SUCCESS);
+			break;
+
+		case PAGE_UP:
+		case PAGE_DOWN:
+			for(i = E.screenrows; i >= 0; i--)
+				editorMoveCursor( c == PAGE_UP ? ARROW_UP: ARROW_DOWN);
 			break;
 		
 		case ARROW_UP:
