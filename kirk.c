@@ -40,7 +40,7 @@ struct editorConfig{
 	int cx, cy; //cursor positions
 	int screenrows, screencols;
 	int numrows;
-	erow row;
+	erow *row;
 	struct termios og_termios;
 };
 
@@ -192,6 +192,19 @@ int getWindowSize(int *rows, int *cols){
 	}
 }
 
+/* -- row operations -- */
+void editorAppendRow(char *s, size_t len){
+	int at;
+
+	E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
+	at = E.numrows;
+	E.row[at].size = len;
+	E.row[at].chars = malloc(len+1);
+	memcpy(E.row[at].chars, s, len);
+	E.row[at].chars[len] = '\0';
+	E.numrows++;
+}
+
 /* -- file i/o -- */
 void editorOpen(char * filename){
 	FILE *fp;
@@ -205,15 +218,12 @@ void editorOpen(char * filename){
 
 	line = NULL;
 	linecap = 0;
-	linelen = getline(&line, &linecap, fp);
-	if(linelen != -1){
-		if(linelen > 0 && (line[linelen -1] == '\n' || line[linelen - 1] == '\r'))
-			linelen--;
-		E.row.size = linelen;
-		E.row.chars = malloc(linelen + 1);
-		memcpy(E.row.chars, line, linelen);
-		E.row.chars[linelen] = '\0';
-		E.numrows = 1;
+	while((linelen = getline(&line, &linecap, fp)) != -1){
+		if(linelen != -1){
+			if(linelen > 0 && (line[linelen -1] == '\n' || line[linelen - 1] == '\r'))
+				linelen--;
+			editorAppendRow(line, linelen);
+		}
 	}
 	free(line);
 	fclose(fp);
@@ -243,33 +253,37 @@ void editorDrawRows(struct abuf *ab){
 	int len;
 	int padding;
 
-	for(y = 0; y < E.screenrows-1; y++){
-		if( y >= E.numrows ){
-			if( E.numrows == 0 && y == E.screenrows / 3 ){
+	for(y = 0; y < E.screenrows; y++){
+		if(y >= E.numrows){
+			if(E.numrows == 0 && y == E.screenrows / 3){
 				len = snprintf(welcome, sizeof(welcome),
 					"Kirk editor -- version %s", KIRK_VERSION);
 				if(len > E.screencols)
 					len = E.screencols;
-				padding = (E.screencols - len) / 2;
+				padding = (E.screencols - len)/2;
 				if(padding){
 					abAppend(ab, "~", 1);
-					padding --;
+					padding--;
 				}
-				while(padding--)
+
+				while(padding --)
 					abAppend(ab, " ", 1);
-				abAppend(ab, welcome, len);	
-				abAppend(ab, "\r\n", 2);
+				abAppend(ab, welcome, len);
 			}else{
-				abAppend(ab, "~\x1b[K\r\n", 6);
+				abAppend(ab, "~", 1);
 			}
 		}else{
-			len = E.row.size;
+			len = E.row[y].size;
 			if(len > E.screencols)
 				len = E.screencols;
-			abAppend(ab, E.row.chars, len);
+			abAppend(ab, E.row[y].chars, len);
 		}
+
+		abAppend(ab, "\x1b[K", 3);
+		if(y < E.screenrows - 1)
+			abAppend(ab, "\r\n", 2);
+		
 	}
-	abAppend(ab, "~\x1b[K", 4);
 }
 
 void editorRefreshScreen(){
@@ -355,6 +369,8 @@ void initEditor(){
 	E.cx = 0;
 	E.cy = 0;
 	E.numrows = 0;
+	E.row = NULL;
+
 	if(getWindowSize(&E.screenrows, &E.screencols) == -1){
 		die("getWindowSize");
 	}
